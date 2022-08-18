@@ -5,6 +5,8 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.nico.noson.Noson;
 import org.nico.noson.entity.NoType;
@@ -20,13 +22,15 @@ public class SimpleClient {
 
 	public static int id = -1;
 
-	public final static String VERSION = Features.VERSION_1_3_0;
+	public final static String VERSION = Features.VERSION_1_4_0;
 
 	public static String serverAddress;
 
 	public static int port = 1024;
 
 	public static String protocol = "pb";
+
+	public final static Pattern PATTERN = Pattern.compile("^(([a-zA-Z0-9._-]+)|([0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}))(:([0-9]{1,4}))$");
 
 	private final static String[] serverAddressSource = new String[]{
 			"https://raw.githubusercontent.com/ainilili/ratel/master/serverlist.json",			//Source
@@ -53,27 +57,41 @@ public class SimpleClient {
 				}
 			}
 		}
+		SimplePrinter.printNotice("");
+
 		if (serverAddress == null) {
 			List<String> serverAddressList = getServerAddressList();
 			if (serverAddressList == null || serverAddressList.size() == 0) {
 				throw new RuntimeException("Please use '-host' to setting server address.");
 			}
-
 			SimplePrinter.printNotice("Please select a server:");
+			SimplePrinter.printNotice("0. Enter the service address manually[" + VERSION + "], such as(127.0.0.1:1024)");
 			for (int i = 0; i < serverAddressList.size(); i++) {
 				SimplePrinter.printNotice((i + 1) + ". " + serverAddressList.get(i));
 			}
 			int serverPick = Integer.parseInt(SimpleWriter.write(User.INSTANCE.getNickname(), "option"));
-			while (serverPick < 1 || serverPick > serverAddressList.size()) {
+			while (serverPick < 0 || serverPick > serverAddressList.size()) {
 				try {
 					SimplePrinter.printNotice("The server address does not exist!");
 					serverPick = Integer.parseInt(SimpleWriter.write(User.INSTANCE.getNickname(), "option"));
 				} catch (NumberFormatException ignore) {}
 			}
-			serverAddress = serverAddressList.get(serverPick - 1);
-			String[] elements = serverAddress.split(":");
-			serverAddress = elements[0];
-			port = Integer.parseInt(elements[1]);
+			if(serverPick == 0){
+				//手动输入服务器
+				String[] address = getValidAddress(SimpleWriter.write(User.INSTANCE.getNickname(), "option"));
+				while(address == null || address.length < 2){
+					SimplePrinter.printNotice("Please enter a valid service address, such as(127.0.0.1:1024)");
+					address = getValidAddress(SimpleWriter.write(User.INSTANCE.getNickname(), "option"));
+				}
+				serverAddress = address[0];
+				port = Integer.parseInt(address[1]);
+			}else{
+				//从服务器列表选择服务器
+				serverAddress = serverAddressList.get(serverPick - 1);
+				String[] elements = serverAddress.split(":");
+				serverAddress = elements[0];
+				port = Integer.parseInt(elements[1]);
+			}
 		}
 
 		if (Objects.equals(protocol, "pb")) {
@@ -83,6 +101,20 @@ public class SimpleClient {
 		} else {
 			throw new UnsupportedOperationException("Unsupported protocol " + protocol);
 		}
+	}
+
+	private static String[] getValidAddress(String address){
+		if(address.isEmpty()){
+			return null;
+		}
+		Matcher matcher = PATTERN.matcher(address);
+		if(matcher.find()){
+			String[] res = new String[2];
+			res[0] = matcher.group(1);
+			res[1] = matcher.group(5);
+			return res;
+		}
+		return null;
 	}
 
 	private static List<String> getServerAddressList() {
